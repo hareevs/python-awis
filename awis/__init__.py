@@ -64,14 +64,14 @@ class AwisApi(object):
     def sign(self, params):
         msg = "\n".join(["GET", self.AWIS_HOST, self.PATH, self._urlencode(params)])
 
-        hmac_signature = hmac.new(self.secret_access_key.encode('utf-8'), msg.encode('utf-8'), hashlib.sha1)
+        hmac_signature = hmac.new(self.secret_access_key.encode('utf-8'), msg.encode('utf-8'), hashlib.sha256)
         signature = base64.b64encode(hmac_signature.digest())
         return signature
 
     def request(self, params, as_xml=True):
         params.update({
             "AWSAccessKeyId": self.access_id,
-            "SignatureMethod": "HmacSHA1",
+            "SignatureMethod": "HmacSHA256",
             "SignatureVersion": 2,
             "Timestamp": self._get_timestamp(),
         })
