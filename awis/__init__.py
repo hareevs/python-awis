@@ -21,15 +21,10 @@ import base64
 import datetime
 import hashlib
 import hmac
-import urllib
-try:
-    from lxml import etree as ET
-except ImportError:
-    try:
-        from xml.etree import cElementTree as ET
-    except ImportError:
-        raise
-        from xml.etree import ElementTree as ET
+from urllib.request import urlopen
+import urllib.parse
+from xml.etree import ElementTree as ET
+
 
 
 __author__ = u'Atamert \xd6l\xe7gen'
@@ -67,15 +62,13 @@ class AwisApi(object):
         self.secret_access_key = secret_access_key
 
     def sign(self, params):
-        msg = "\n".join(["GET",
-                         self.AWIS_HOST,
-                         self.PATH,
-                         self._urlencode(params)])
-        hmac_signature = hmac.new(self.secret_access_key, msg, hashlib.sha1)
+        msg = "\n".join(["GET", self.AWIS_HOST, self.PATH, self._urlencode(params)])
+
+        hmac_signature = hmac.new(self.secret_access_key.encode('utf-8'), msg.encode('utf-8'), hashlib.sha1)
         signature = base64.b64encode(hmac_signature.digest())
         return signature
 
-    def request(self, params, tries=3, as_xml=True):
+    def request(self, params, as_xml=True):
         params.update({
             "AWSAccessKeyId": self.access_id,
             "SignatureMethod": "HmacSHA1",
@@ -83,48 +76,39 @@ class AwisApi(object):
             "Timestamp": self._get_timestamp(),
         })
         params["Signature"] = self.sign(params)
-        url = "http://%s%s?%s" % (self.AWIS_HOST,
-                                  self.PATH,
-                                  self._urlencode(params))
-        failed_requests = 0
-        while failed_requests < tries:
-            response = urllib.urlopen(url)
-            if response.code == 200:
-                if as_xml:
-                    return ET.parse(response)
-                else:
-                    return response.read()
-            failed_requests += 1
-        raise IOError(
-          "All %d requests failed, latest response code is %d" % (
-              failed_requests,
-              response.code,
-           ),
-        )
+
+        url = "http://%s%s?%s" % (self.AWIS_HOST, self.PATH, self._urlencode(params))
+
+        response = urlopen(url)
+        if response.code == 200:
+            if as_xml:
+                return ET.parse(response)
+            else:
+                return response.read()
 
     def url_info(self, urls, *response_groups, **kwargs):
-        params = { "Action": "UrlInfo" }
+        params = {"Action": "UrlInfo"}
         if not isinstance(urls, (list, tuple)):
             params.update({
-                "Url": urllib.quote(urls),
+                "Url": urllib.parse.quote(urls),
                 "ResponseGroup": ",".join(response_groups),
              })
         else:
             if len(urls) > 5:
-                raise RuntimeError, "Maximum number of batch URLs is 5."
+                raise ValueError("Maximum number of batch URLs is 5.")
 
-            params.update({ "UrlInfo.Shared.ResponseGroup": ",".join(response_groups), })
+            params.update({"UrlInfo.Shared.ResponseGroup": ",".join(response_groups)})
 
             for i, url in enumerate(urls):
-                params.update({"UrlInfo.%d.Url" % (i + 1): urllib.quote(url)})
+                params.update({"UrlInfo.%d.Url" % (i + 1): urllib.parse.quote(url)})
 
         return self.request(params, **kwargs)
 
     @staticmethod
     def _get_timestamp():
-        return datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        return '{}Z'.format(datetime.datetime.utcnow().isoformat())
 
     @staticmethod
     def _urlencode(params):
         params = [(key, params[key]) for key in sorted(params.keys())]
-        return urllib.urlencode(params)
+        return urllib.parse.urlencode(params)
